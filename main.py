@@ -88,6 +88,7 @@ def build_prompt(data, language):
         f"1. Ringkasan profil alumni ini.\n"
         f"2. Analisis peluang kolaborasi dari alumni lain yang sesuai keahlian dan juga alumni lain yang membutuhkan dukungan sesuai keahliannya.\n"
         f"3. Rekomendasi nyata dan profesional untuk kolaborasi atau pengembangan karir berdasarkan data alumni lainnya.\n"
+        f"4. Tampilkan minimal 3 contoh **judul atau nama proyek** kolaborasi yang konkrit dan realistis berdasarkan data peluang dari alumni lain, yang bisa dikerjakan bersama alumni ini.\n"
         f"Tolong gunakan bahasa yang jelas dan profesional. Jangan sebutkan jumlah atau nama alumni lain."
     )
 
@@ -105,6 +106,7 @@ def build_prompt(data, language):
         f"1. A brief profile summary.\n"
         f"2. Analysis of collaboration opportunities relevant to their skills and the others need of support who meet their skills.\n"
         f"3. Practical, professional recommendations for collaboration or career advancement based on alumni data.\n"
+        f"4. Present at least 3 **concrete and realistic project titles** or collaboration themes derived from available alumni data that this person could join.\n"
         f"Avoid naming or counting other alumni."
     )
 
