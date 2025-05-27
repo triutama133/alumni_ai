@@ -12,6 +12,11 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
 app = FastAPI()
 
+# Root endpoint to avoid 404 errors on /
+@app.get("/")
+def root():
+    return {"message": "Alumni AI backend is running!"}
+
 class RekomendasiInput(BaseModel):
     nama_lengkap: str
     language: str = "id"  # default Bahasa Indonesia
