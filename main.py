@@ -134,7 +134,7 @@ async def rekomendasi(input: RekomendasiInput):
         }.get(input.language.lower(), "Kamu adalah asisten cerdas yang memberikan saran karir dan kolaborasi alumni dalam bahasa Indonesia.")
 
         body = {
-            "model": "llama3-8b-8192",
+            "model": "llama-3.1-8b-instant",
             "messages": [
                 {"role": "system", "content": system_content},
                 {"role": "user", "content": prompt}
