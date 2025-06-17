@@ -482,13 +482,9 @@ def build_proyek_prompt(proyek_input_data, recommended_alumni, language):
         f"Silakan berikan:\n"
         f"1. Deskripsi ringkas gambaran proyeknya dan kebutuhannya.\n"
         f"2. Analisis singkat tentang kebutuhan talenta untuk proyek ini berdasarkan deskripsi proyek.\n"
-        f"3. Rekomendasikan hingga 10 alumni dari daftar yang **telah disediakan di atas** yang paling cocok untuk proyek ini, dan tentukan **peran spesifik** yang bisa mereka berikan dalam proyek tersebut (misalnya, \"Lead Data Analyst\", \"Konsultan Bisnis\", \"Content Creator Media Sosial\"), dan berikan **justifikasi singkat** mengapa mereka cocok untuk peran tersebut berdasarkan keahlian dan aktivitas mereka. "
-        f"Outputkan rekomendasi alumni ini dalam format **tabel Markdown** yang jelas dengan header sebagai berikut:\n"
-        f"| Nama Alumni | Peran yang Direkomendasikan | Justifikasi |\n"
-        f"|---|---|---|\n"
-        f"(Isi data tabel di bawah baris ini. Jika ada kurang dari 10 alumni yang cocok, sebutkan semua yang cocok.)\n" # Instruksi tambahan untuk mengisi tabel
+        f"3. Rekomendasikan hingga 10 alumni dari daftar yang **telah disediakan di atas** yang paling cocok untuk proyek ini, dan untuk setiap alumni, tentukan **peran spesifik** yang bisa mereka berikan dalam proyek tersebut (misalnya, \"Lead Data Analyst\", \"Konsultan Bisnis\", \"Content Creator Media Sosial\"), dan berikan **justifikasi singkat** mengapa mereka cocok untuk peran tersebut berdasarkan keahlian dan aktivitas mereka. Sajikan ini dalam format **daftar poin (bulleted list)** yang jelas.\n" # Diubah ke format daftar poin
         f"4. Selesaikan respons Anda dengan pesan penutup yang profesional."
-        f"Tolong gunakan bahasa yang jelas, profesional, dan fokus pada peran yang konkret. Pastikan tabel Markdown diformat dengan benar."
+        f"Tolong gunakan bahasa yang jelas, profesional, dan fokus pada peran yang konkret. Pastikan formatnya adalah daftar poin yang rapi."
     )
 
     bahasa_en = (
@@ -499,13 +495,9 @@ def build_proyek_prompt(proyek_input_data, recommended_alumni, language):
         f"Please provide:\n"
         f"1. A brief overview of the project and its needs.\n"
         f"2. A brief analysis of the talent needs for this project based on the project description.\n"
-        f"3. Recommend up to 10 alumni from the list **provided above** who are most suitable for this project, and specify their **potential role** in the project (e.g., \"Lead Data Analyst\", \"Business Consultant\", \"Social Media Content Creator\"), and provide a **brief justification** for why they are suitable for that role based on their skills and activities. "
-        f"Output these alumni recommendations in a **clear Markdown table** with the following headers:\n"
-        f"| Alumni Name | Recommended Role | Justification |\n"
-        f"|---|---|---|\n"
-        f"(Fill in the table data below this line. If fewer than 10 alumni are suitable, list all suitable ones.)\n" # Additional instruction to fill table
+        f"3. Recommend up to 10 alumni from the list **provided above** who are most suitable for this project, and for each alumni, specify their **potential role** in the project (e.g., \"Lead Data Analyst\", \"Business Consultant\", \"Social Media Content Creator\"), and provide a **brief justification** for why they are suitable for that role based on their skills and activities. Present this in a **clear bulleted list format**.\n" # Changed to bulleted list format
         f"4. Conclude your response with a professional closing message."
-        f"Please use clear, professional language, and focus on concrete roles. Ensure the Markdown table is correctly formatted."
+        f"Please use clear, professional language, and focus on concrete roles. Ensure the output is a neat bulleted list."
     )
 
     return bahasa_en if language.lower() == "en" else bahasa_id
