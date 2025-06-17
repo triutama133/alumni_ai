@@ -478,26 +478,34 @@ def build_proyek_prompt(proyek_input_data, recommended_alumni, language):
         f"Anda adalah asisten cerdas yang bertugas merekomendasikan talenta alumni untuk sebuah proyek. "
         f"Berikut adalah informasi proyek yang diajukan:\n"
         f"{proyek_info}\n"
+        f"{alumni_list_content}\n\n" # Informasi alumni ditempatkan sebagai konteks umum
         f"Silakan berikan:\n"
         f"1. Deskripsi ringkas gambaran proyeknya dan kebutuhannya.\n"
         f"2. Analisis singkat tentang kebutuhan talenta untuk proyek ini berdasarkan deskripsi proyek.\n"
-        f"3. Rekomendasikan hingga 10 alumni yang paling cocok untuk proyek ini, dan tentukan **peran spesifik** yang bisa mereka berikan dalam proyek tersebut (misalnya, \"Lead Data Analyst\", \"Konsultan Bisnis\", \"Content Creator Media Sosial\"), dan berikan **justifikasi singkat** mengapa mereka cocok untuk peran tersebut berdasarkan keahlian dan aktivitas mereka:\n"
-        f"{alumni_list_content}" # Disisipkan langsung di dalam poin 3
-        f"4. Format output dalam bentuk daftar poin atau tabel yang jelas, dengan nama alumni, peran yang direkomendasikan, dan justifikasi. Jika ada kurang dari 10 alumni yang cocok, sebutkan semua yang cocok."
-        f"Tolong gunakan bahasa yang jelas, profesional, dan fokus pada peran yang konkret."
+        f"3. Rekomendasikan hingga 10 alumni dari daftar yang **telah disediakan di atas** yang paling cocok untuk proyek ini, dan tentukan **peran spesifik** yang bisa mereka berikan dalam proyek tersebut (misalnya, \"Lead Data Analyst\", \"Konsultan Bisnis\", \"Content Creator Media Sosial\"), dan berikan **justifikasi singkat** mengapa mereka cocok untuk peran tersebut berdasarkan keahlian dan aktivitas mereka. "
+        f"Outputkan rekomendasi alumni ini dalam format **tabel Markdown** yang jelas dengan header sebagai berikut:\n"
+        f"| Nama Alumni | Peran yang Direkomendasikan | Justifikasi |\n"
+        f"|---|---|---|\n"
+        f"(Isi data tabel di bawah baris ini. Jika ada kurang dari 10 alumni yang cocok, sebutkan semua yang cocok.)\n" # Instruksi tambahan untuk mengisi tabel
+        f"4. Selesaikan respons Anda dengan pesan penutup yang profesional."
+        f"Tolong gunakan bahasa yang jelas, profesional, dan fokus pada peran yang konkret. Pastikan tabel Markdown diformat dengan benar."
     )
 
     bahasa_en = (
         f"You are a smart assistant tasked with recommending alumni talent for a project. "
         f"Here is the submitted project information:\n"
         f"{proyek_info}\n"
+        f"{alumni_list_content}\n\n" # Alumni info placed as general context
         f"Please provide:\n"
         f"1. A brief overview of the project and its needs.\n"
         f"2. A brief analysis of the talent needs for this project based on the project description.\n"
-        f"3. Recommend up to 10 alumni who are most suitable for this project, and specify their **potential role** in the project (e.g., \"Lead Data Analyst\", \"Business Consultant\", \"Social Media Content Creator\"), and provide a **brief justification** for why they are suitable for that role based on their skills and activities:\n"
-        f"{alumni_list_content}" # Inserted directly inside point 3 (matches Indonesian structure)
-        f"4. Format the output as a clear bulleted list or table, with alumni name, recommended role, and justification. If fewer than 10 alumni are suitable, list all suitable ones."
-        f"Please use clear, professional language, and focus on concrete roles."
+        f"3. Recommend up to 10 alumni from the list **provided above** who are most suitable for this project, and specify their **potential role** in the project (e.g., \"Lead Data Analyst\", \"Business Consultant\", \"Social Media Content Creator\"), and provide a **brief justification** for why they are suitable for that role based on their skills and activities. "
+        f"Output these alumni recommendations in a **clear Markdown table** with the following headers:\n"
+        f"| Alumni Name | Recommended Role | Justification |\n"
+        f"|---|---|---|\n"
+        f"(Fill in the table data below this line. If fewer than 10 alumni are suitable, list all suitable ones.)\n" # Additional instruction to fill table
+        f"4. Conclude your response with a professional closing message."
+        f"Please use clear, professional language, and focus on concrete roles. Ensure the Markdown table is correctly formatted."
     )
 
     return bahasa_en if language.lower() == "en" else bahasa_id
