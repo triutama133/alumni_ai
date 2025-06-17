@@ -5,6 +5,7 @@ import httpx
 import asyncpg
 import traceback # Import module traceback
 from dotenv import load_dotenv
+from fastapi.middleware.cors import CORSMiddleware # Import CORSMiddleware
 
 # Muat variabel lingkungan
 load_dotenv()
@@ -14,13 +15,21 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 app = FastAPI()
 
+
+
 # Endpoint utama untuk menghindari error 404 pada /
 @app.get("/")
 def root():
     return {"message": "Alumni AI backend is running!"}
 
+# Model untuk input rekomendasi alumni individu
 class RekomendasiInput(BaseModel):
     nama_lengkap: str
+    language: str = "id"  # default Bahasa Indonesia
+
+# Model baru untuk input rekomendasi proyek
+class ProyekInput(BaseModel):
+    ide_proyek: str # Ini adalah satu kolom isian yang menampung judul dan/atau deskripsi
     language: str = "id"  # default Bahasa Indonesia
 
 async def cari_top_alumni_kolaborasi(current_alumni_id: int, current_alumni_full_profile_text: str):
@@ -84,7 +93,7 @@ async def cari_top_alumni_kolaborasi(current_alumni_id: int, current_alumni_full
             # Gabungkan skill_gabungan dari alumni_db dan detail dari tabel aktivitas menjadi satu string untuk alumni lain
             other_alumni_full_profile_text = " ".join(filter(None, [other_alumni_skills_gabungan_from_db] + detail_parts_other_alumni)).strip().lower()
             
-            # Cek relevansi: hitung berapa banyak kata kunci dari alumni utama yang cocok dengan profil alumni lain
+            # Cek relevansi: hitung berapa banyak kata kunci dari profil alumni utama yang cocok dengan profil alumni lain
             match_score = 0
             if other_alumni_full_profile_text:
                 for keyword in current_alumni_keywords:
@@ -112,14 +121,18 @@ async def cari_top_alumni_kolaborasi(current_alumni_id: int, current_alumni_full
         await conn.close() 
 
 async def ambil_profil_alumni(nama_lengkap: str):
+    """
+    Mengambil profil lengkap alumni dari database berdasarkan nama lengkap (non-exact match).
+    """
     # Menambahkan statement_cache_size=0 untuk mengatasi error prepared statement
     conn = await asyncpg.connect(SUPABASE_DB_URL, statement_cache_size=0)
     
     try: 
         # Menambahkan nama_panggilan dan skill_gabungan ke query SELECT
+        # Menggunakan TRIM() untuk menangani spasi di awal/akhir input dan kolom database
         row = await conn.fetchrow("""
             SELECT id, nama_lengkap, nama_panggilan, aktivitas, skill_gabungan
-            FROM alumni_db WHERE LOWER(nama_lengkap) = LOWER($1)
+            FROM alumni_db WHERE LOWER(TRIM(nama_lengkap)) = LOWER(TRIM($1))
         """, nama_lengkap)
 
         if not row:
@@ -363,3 +376,218 @@ async def rekomendasi(input: RekomendasiInput):
         # Menambahkan detail traceback ke respons error untuk debugging yang lebih baik
         error_traceback = traceback.format_exc()
         raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}\n\nTraceback:\n{error_traceback}")
+
+# --- START ENDPOINT DAN LOGIKA REKOMENDASI PROYEK BARU ---
+
+async def cari_alumni_untuk_proyek(project_text: str):
+    """
+    Mencari hingga 10 alumni yang paling relevan untuk suatu proyek
+    berdasarkan deskripsi proyek.
+    """
+    conn = await asyncpg.connect(SUPABASE_DB_URL, statement_cache_size=0)
+    
+    try:
+        # Ambil semua alumni dari alumni_db
+        all_alumni_general = await conn.fetch(
+            "SELECT id, nama_lengkap, aktivitas, skill_gabungan FROM alumni_db"
+        )
+
+        project_keywords = set(project_text.lower().split())
+        alumni_candidates = []
+
+        for alumni_gen in all_alumni_general:
+            alumni_id = alumni_gen["id"]
+            alumni_nama = alumni_gen["nama_lengkap"]
+            alumni_aktivitas_gabungan = alumni_gen["aktivitas"]
+            alumni_aktivitas_list = [a.strip() for a in alumni_aktivitas_gabungan.split(',')]
+            alumni_skills_gabungan = alumni_gen["skill_gabungan"] or ""
+
+            detail_parts_alumni = []
+            for act_sub in alumni_aktivitas_list:
+                if act_sub == "bekerja":
+                    detail = await conn.fetchrow("""
+                        SELECT skill, deskripsi_skill, sertifikasi, dukungan
+                        FROM alumni_pekerja WHERE alumni_id = $1
+                    """, alumni_id)
+                    if detail:
+                        detail_parts_alumni.extend([detail.get('skill'), detail.get('deskripsi_skill'), detail.get('sertifikasi'), detail.get('dukungan')])
+                elif act_sub == "ibu rumah tangga":
+                    detail = await conn.fetchrow("""
+                        SELECT bidang_minat, spesifik_bidang, pengalaman_kelas, perlu_grup
+                        FROM alumni_rumah_tangga WHERE alumni_id = $1
+                    """, alumni_id)
+                    if detail:
+                        detail_parts_alumni.extend([detail.get('bidang_minat'), detail.get('spesifik_bidang'), detail.get('pengalaman_kelas'), detail.get('perlu_grup')])
+                elif act_sub == "bisnis / freelance":
+                    detail = await conn.fetchrow("""
+                        SELECT bidang_usaha, dukungan, kolaborasi, butuh_sdm, skill_praktikal
+                        FROM alumni_bisnis WHERE alumni_id = $1
+                    """, alumni_id)
+                    if detail:
+                        detail_parts_alumni.extend([detail.get('bidang_usaha'), detail.get('dukungan'), detail.get('kolaborasi'), detail.get('butuh_sdm'), detail.get('skill_praktikal')])
+            
+            alumni_full_profile_text = " ".join(filter(None, [alumni_skills_gabungan] + detail_parts_alumni)).strip().lower()
+
+            match_score = 0
+            if alumni_full_profile_text:
+                for keyword in project_keywords:
+                    if keyword in alumni_full_profile_text:
+                        match_score += 1
+            
+            if match_score > 0:
+                alumni_candidates.append({
+                    "nama_lengkap": alumni_nama,
+                    "aktivitas": alumni_aktivitas_gabungan,
+                    "skills_gabungan": alumni_skills_gabungan,
+                    "full_profile_text": alumni_full_profile_text, # Untuk relevansi ke LLM
+                    "match_score": match_score
+                })
+        
+        # Urutkan berdasarkan skor kecocokan, ambil hingga 10 alumni teratas
+        alumni_candidates.sort(key=lambda x: x['match_score'], reverse=True)
+        return alumni_candidates[:10] # Batasi hingga 10 alumni
+    finally:
+        await conn.close()
+
+
+def build_proyek_prompt(proyek_input_data, recommended_alumni, language):
+    """
+    Membangun prompt untuk LLM berdasarkan ide proyek dan alumni yang direkomendasikan.
+    """
+    proyek_info = ""
+    # Menggunakan input.ide_proyek langsung sebagai deskripsi proyek
+    proyek_info += f"Ide Proyek: {proyek_input_data.ide_proyek}\n"
+
+    alumni_list_content = ""
+    if recommended_alumni:
+        if language.lower() == "id":
+            alumni_list_content = "Berikut adalah daftar alumni yang paling relevan dengan ide proyek ini:\n"
+            for alumni in recommended_alumni:
+                # Menggunakan full_profile_text untuk konteks LLM
+                summary = alumni['full_profile_text'] 
+                alumni_list_content += f"- Nama: {alumni['nama_lengkap']} (Aktivitas: {alumni['aktivitas'].capitalize()}, Keahlian: {alumni['skills_gabungan']}). Detail Profil: {summary}\n"
+        else: # en
+            alumni_list_content = "Here is a list of the most relevant alumni for this project idea:\n"
+            for alumni in recommended_alumni:
+                summary = alumni['full_profile_text']
+                alumni_list_content += f"- Name: {alumni['nama_lengkap']} (Activity: {alumni['aktivitas'].capitalize()}, Skills: {alumni['skills_gabungan']}). Profile Details: {summary}\n"
+    else:
+        alumni_list_content = "Tidak ada alumni yang relevan ditemukan di database untuk proyek ini." if language.lower() == "id" else "No relevant alumni found in the database for this project."
+
+    bahasa_id = (
+        f"Anda adalah asisten cerdas yang bertugas merekomendasikan talenta alumni untuk sebuah proyek. "
+        f"Berikut adalah informasi proyek yang diajukan:\n"
+        f"{proyek_info}\n"
+        f"Silakan berikan:\n"
+        f"1. Deskripsi ringkas gambaran proyeknya dan kebutuhannya.\n"
+        f"2. Analisis singkat tentang kebutuhan talenta untuk proyek ini berdasarkan deskripsi proyek.\n"
+        f"3. Rekomendasikan hingga 10 alumni yang paling cocok untuk proyek ini, dan tentukan **peran spesifik** yang bisa mereka berikan dalam proyek tersebut (misalnya, \"Lead Data Analyst\", \"Konsultan Bisnis\", \"Content Creator Media Sosial\"), dan berikan **justifikasi singkat** mengapa mereka cocok untuk peran tersebut berdasarkan keahlian dan aktivitas mereka:\n"
+        f"{alumni_list_content}" # Disisipkan langsung di dalam poin 3
+        f"4. Format output dalam bentuk daftar poin atau tabel yang jelas, dengan nama alumni, peran yang direkomendasikan, dan justifikasi. Jika ada kurang dari 10 alumni yang cocok, sebutkan semua yang cocok."
+        f"Tolong gunakan bahasa yang jelas, profesional, dan fokus pada peran yang konkret."
+    )
+
+    bahasa_en = (
+        f"You are a smart assistant tasked with recommending alumni talent for a project. "
+        f"Here is the submitted project information:\n"
+        f"{proyek_info}\n"
+        f"Please provide:\n"
+        f"1. A brief overview of the project and its needs.\n"
+        f"2. A brief analysis of the talent needs for this project based on the project description.\n"
+        f"3. Recommend up to 10 alumni who are most suitable for this project, and specify their **potential role** in the project (e.g., \"Lead Data Analyst\", \"Business Consultant\", \"Social Media Content Creator\"), and provide a **brief justification** for why they are suitable for that role based on their skills and activities:\n"
+        f"{alumni_list_content}" # Inserted directly inside point 3 (matches Indonesian structure)
+        f"4. Format the output as a clear bulleted list or table, with alumni name, recommended role, and justification. If fewer than 10 alumni are suitable, list all suitable ones."
+        f"Please use clear, professional language, and focus on concrete roles."
+    )
+
+    return bahasa_en if language.lower() == "en" else bahasa_id
+
+@app.post("/rekomendasi")
+async def rekomendasi(input: RekomendasiInput):
+    try:
+        data = await ambil_profil_alumni(input.nama_lengkap)
+        prompt = build_prompt(data, input.language)
+
+        headers = {
+            "Content-Type": "application/json"
+        }
+        # Tambahkan API Key ke URL untuk Gemini
+        gemini_api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
+
+        system_content = {
+            "id": "Kamu adalah asisten cerdas yang memberikan saran karir dan kolaborasi alumni dalam bahasa Indonesia yang profesional.",
+            "en": "You are a smart assistant providing alumni career and kolaborasi suggestions in fluent English."
+        }.get(input.language.lower(), "Kamu adalah asisten cerdas yang memberikan saran karir dan kolaborasi alumni dalam bahasa Indonesia.")
+
+        body = {
+            "contents": [
+                {"role": "user", "parts": [{"text": system_content + "\n\n" + prompt}]}
+            ],
+            "generationConfig": {
+                "temperature": 0.7,
+                "maxOutputTokens": 2500 
+            }
+        }
+        
+        async with httpx.AsyncClient(timeout=90.0) as client:
+            res = await client.post(gemini_api_url, headers=headers, json=body)
+            res.raise_for_status()
+            # Parsing respons Gemini API
+            content = res.json()["candidates"][0]["content"]["parts"][0]["text"]
+            return {"rekomendasi": content.strip()}
+
+    except Exception as e:
+        # Menambahkan detail traceback ke respons error untuk debugging yang lebih baik
+        error_traceback = traceback.format_exc()
+        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}\n\nTraceback:\n{error_traceback}")
+
+# --- START ENDPOINT DAN LOGIKA REKOMENDASI PROYEK BARU ---
+
+@app.post("/proyek_rekomendasi")
+async def proyek_rekomendasi(input: ProyekInput):
+    try:
+        # Menggunakan ide_proyek langsung sebagai project_text
+        project_text = input.ide_proyek.strip()
+        if not project_text: # ide_proyek tidak boleh kosong
+            raise HTTPException(status_code=400, detail="Ide proyek tidak boleh kosong.")
+
+        # Cari alumni yang relevan untuk proyek
+        recommended_alumni_data = await cari_alumni_untuk_proyek(project_text)
+        
+        # Bangun prompt untuk LLM
+        # Mengirimkan ProyekInput langsung ke build_proyek_prompt
+        prompt = build_proyek_prompt(input, recommended_alumni_data, input.language)
+
+        headers = {
+            "Content-Type": "application/json"
+        }
+        gemini_api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
+
+        system_content = {
+            "id": "Kamu adalah asisten cerdas yang memberikan rekomendasi talenta alumni dan peran spesifik mereka untuk proyek yang diberikan.",
+            "en": "You are a smart assistant providing alumni talent recommendations and their specific roles for a given project."
+        }.get(input.language.lower(), "Kamu adalah asisten cerdas yang memberikan rekomendasi talenta alumni dan peran spesifik mereka untuk proyek yang diberikan.")
+
+        body = {
+            "contents": [
+                {"role": "user", "parts": [{"text": system_content + "\n\n" + prompt}]}
+            ],
+            "generationConfig": {
+                "temperature": 0.7,
+                "maxOutputTokens": 2500 # Cukup untuk daftar 10 alumni dengan peran dan justifikasi
+            }
+        }
+        
+        async with httpx.AsyncClient(timeout=90.0) as client: # Timeout untuk LLM
+            res = await client.post(gemini_api_url, headers=headers, json=body)
+            res.raise_for_status()
+            content = res.json()["candidates"][0]["content"]["parts"][0]["text"]
+            return {"rekomendasi_proyek": content.strip()}
+
+    except HTTPException as e:
+        raise e # Re-raise HTTPExceptions (e.g., 400 or 404)
+    except Exception as e:
+        error_traceback = traceback.format_exc()
+        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}\n\nTraceback:\n{error_traceback}")
+
+# --- END FITUR REKOMENDASI PROYEK BARU ---
